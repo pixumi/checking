@@ -251,7 +251,7 @@
                             <button onclick="exportExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3.5 py-2 rounded-lg font-bold transition flex items-center gap-2 shadow">
                                 <i class="fa-solid fa-file-excel text-lg"></i> Unduh Report Excel (.xlsx)
                             </button>
-                            <button onclick="openUploadGDriveModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3.5 py-2 rounded-lg font-bold transition flex items-center gap-2 shadow">
+                            <button onclick="uploadViaAPI()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3.5 py-2 rounded-lg font-bold transition flex items-center gap-2 shadow">
                                 <i class="fa-brands fa-google-drive text-amber-300 text-lg"></i> Upload Report to GDrive
                             </button>
                         </div>
@@ -1019,66 +1019,72 @@
         }
 
                 async function uploadViaAPI() {
-            if (cargoData.length === 0) {
-                showToast("Tidak ada data untuk di-upload", "error");
-                return;
-            }
-        
-            showToast("Mempersiapkan data Excel...", "info");
-        
-            // 1. Siapkan struktur baris Excel
-            const exportRows = cargoData.map(item => {
-                let rowObj = item._original && typeof item._original === 'object' ? { ...item._original } : {};
-                rowObj["Document Date"] = item["Document Date"];
-                rowObj["Vendor Name"] = item["Vendor Name"];
-                rowObj["Plant"] = item["Plant"];
-                rowObj["Inbound Num."] = item["Inbound Num."];
-                rowObj["Material Description"] = item["Material Description"];
-                rowObj["No. Koli"] = item["No. Koli"];
-                rowObj["STATUS"] = item.Status;
-                return rowObj;
-            });
-        
-            const worksheet = XLSX.utils.json_to_sheet(exportRows);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Report Expedisi");
-        
-            // 2. Generate Excel sebagai string Base64 (Syarat untuk Apps Script)
-            const excelBase64 = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
-            const fileName = `Report_Loading_Expedisi_${new Date().toISOString().slice(0,10)}.xlsx`;
-        
-            // 3. Masukkan Web App URL yang Anda copy dari Google Apps Script tadi
-            const webAppUrl = "https://script.google.com/macros/s/AKfycbxRmziQ_Er-PsueIN5_DBeUI3K8dM2IYnMjGRW5inAqgNePqyGtiq2T72TPJ6ozzV1iZw/exec";
-        
-            showToast("Mengunggah report ke folder GDrive...", "info");
-        
-            // 4. Kirim data ke Google Apps Script tanpa perlu proses login OAuth!
-            try {
-                const response = await fetch(webAppUrl, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        filename: fileName,
-                        content: excelBase64
-                    }),
-                    // Apps script kadang memerlukan header ini agar CORS tidak memblokir JSON
-                    headers: {
-                        "Content-Type": "text/plain;charset=utf-8", 
+                    console.log("[DEBUG] Tombol upload diklik. Memulai proses uploadViaAPI...");
+                    
+                    if (cargoData.length === 0) {
+                        console.warn("[DEBUG] Data kosong, proses dihentikan.");
+                        showToast("Tidak ada data untuk di-upload", "error");
+                        return;
                     }
-                });
-        
-                const result = await response.json();
                 
-                if (result.status === "success") {
-                    closeUploadGDriveModal();
-                    showToast("Upload Berhasil! Report langsung masuk ke folder tim.", "success");
-                } else {
-                    showToast("Upload gagal: " + result.message, "error");
+                    showToast("Mempersiapkan data Excel...", "info");
+                    console.log(`[DEBUG] Memproses ${cargoData.length} baris data...`);
+                
+                    try {
+                        const exportRows = cargoData.map(item => {
+                            let rowObj = item._original && typeof item._original === 'object' ? { ...item._original } : {};
+                            rowObj["Document Date"] = item["Document Date"];
+                            rowObj["Vendor Name"] = item["Vendor Name"];
+                            rowObj["Plant"] = item["Plant"];
+                            rowObj["Inbound Num."] = item["Inbound Num."];
+                            rowObj["Material Description"] = item["Material Description"];
+                            rowObj["No. Koli"] = item["No. Koli"];
+                            rowObj["STATUS"] = item.Status;
+                            return rowObj;
+                        });
+                
+                        const worksheet = XLSX.utils.json_to_sheet(exportRows);
+                        const workbook = XLSX.utils.book_new();
+                        XLSX.utils.book_append_sheet(workbook, worksheet, "Report Expedisi");
+                        console.log("[DEBUG] File Excel berhasil di-generate di memori.");
+                
+                        const excelBase64 = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+                        const fileName = `Report_Loading_Expedisi_${new Date().toISOString().slice(0,10)}.xlsx`;
+                
+                        // MASUKKAN URL WEB APP DARI GOOGLE APPS SCRIPT DI SINI
+                        const webAppUrl = "PASTE_WEB_APP_URL_ANDA_DISINI";
+                        console.log("[DEBUG] Target Web App URL:", webAppUrl);
+                
+                        showToast("Mengunggah report ke folder GDrive...", "info");
+                        console.log("[DEBUG] Mengirim request POST ke Google Apps Script...");
+                
+                        const response = await fetch(webAppUrl, {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                filename: fileName,
+                                content: excelBase64
+                            }),
+                            headers: {
+                                "Content-Type": "text/plain;charset=utf-8", 
+                            }
+                        });
+                
+                        console.log("[DEBUG] Menunggu balasan dari server...");
+                        const result = await response.json();
+                        console.log("[DEBUG] Balasan dari server:", result);
+                        
+                        if (result.status === "success") {
+                            if (typeof closeUploadGDriveModal === 'function') closeUploadGDriveModal();
+                            showToast("Upload Berhasil! Report langsung masuk ke folder tim.", "success");
+                        } else {
+                            showToast("Upload gagal: " + result.message, "error");
+                            console.error("[DEBUG] Server membalas dengan pesan error:", result.message);
+                        }
+                    } catch (error) {
+                        console.error("[DEBUG] Terjadi error kritis pada fungsi upload:", error);
+                        showToast("Gagal terhubung ke server GDrive. Cek console log.", "error");
+                    }
                 }
-            } catch (error) {
-                console.error("Error upload:", error);
-                showToast("Gagal terhubung ke server GDrive.", "error");
-            }
-        }
 
         function exportExcel() {
             if (cargoData.length === 0) {
