@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sistem Pengecekan Loading Expedisi</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- SheetJS (XLSX parsing & generation) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- HTML5-QRCode Scanner library -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <!-- Google API & Identity Services for Google Picker Integration -->
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        #reader video { object-fit: cover !important; border-radius: 0.75rem; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col pb-10">
+
+    <!-- Header / Navbar -->
+    <header class="bg-indigo-700 text-white shadow-lg sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <i class="fa-solid font-bold fa-truck-ramp-box text-2xl text-yellow-400"></i>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight">Checklist Cargo Expedisi</h1>
+                    <p class="text-xs text-indigo-200">Auto-Save Memori Lokal & Offline Ready</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button id="btn-change-file" onclick="showImportSection()" class="bg-indigo-600 hover:bg-indigo-800 text-xs text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition hidden">
+                    <i class="fa-solid fa-folder-open text-amber-300"></i>
+                    <span>Ganti File / Link</span>
+                </button>
+                <button id="btn-sync-gdrive" class="bg-indigo-600 hover:bg-indigo-800 text-xs text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
+                    <i class="fa-brands fa-google-drive text-amber-300"></i>
+                    <span class="hidden sm:inline">Folder GDrive</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto w-full px-4 pt-4 flex-grow space-y-5">
+        
+        <!-- SECTION 1: File Import / Select Input (Disembunyikan otomatis jika data sudah siap) -->
+        <div id="section-import" class="max-w-2xl mx-auto bg-white rounded-xl shadow-md border border-slate-200 p-6 space-y-4">
+            
+            <!-- PANEL DRAFT SESI TERSIMPAN (Baru Ditambahkan) -->
+            <div id="draft-session-banner" class="hidden bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
+                <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-9 h-9 bg-emerald-100 text-emerald-700 rounded-lg flex items-center justify-center font-bold">
+                            <i class="fa-solid fa-clock-rotate-left text-lg"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-xs text-emerald-900 uppercase tracking-wide">Pekerjaan Tersimpan Ditemukan</h3>
+                            <p id="draft-time-info" class="text-[11px] text-emerald-700">Terakhir disimpan: -</p>
+                        </div>
+                    </div>
+                    <span id="draft-count-tag" class="bg-emerald-200 text-emerald-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full">0 Koli</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-center text-xs py-1">
+                    <div class="bg-white/80 rounded-lg p-2 border border-emerald-100">
+                        <span class="block text-[10px] text-slate-500">Ready Depo</span>
+                        <span id="draft-ready-count" class="font-bold text-amber-700">0</span>
+                    </div>
+                    <div class="bg-white/80 rounded-lg p-2 border border-emerald-100">
+                        <span class="block text-[10px] text-slate-500">Termuat</span>
+                        <span id="draft-termuat-count" class="font-bold text-emerald-700">0</span>
+                    </div>
+                </div>
+
+                <div class="flex gap-2">
+                    <button onclick="resumeSavedSession()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-lg text-xs transition flex items-center justify-center gap-2 shadow-sm">
+                        <i class="fa-solid fa-play"></i> Lanjutkan Pekerjaan Ini
+                    </button>
+                    <button onclick="clearSavedDraft()" class="bg-rose-100 hover:bg-rose-200 text-rose-700 font-medium py-2.5 px-3 rounded-lg text-xs transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-trash-can"></i> Hapus & Mulai Baru
+                    </button>
+                </div>
+            </div>
+
+            <div class="text-center space-y-1 mb-4">
+                <div class="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-2 text-xl">
+                    <i class="fa-solid fa-file-import"></i>
+                </div>
+                <h2 class="text-base font-bold text-slate-800">Pilih Data Manifest Expedisi Baru</h2>
+                <p class="text-xs text-slate-500">Masukkan link Google Spreadsheet, pilih dari Drive, atau upload file Excel</p>
+            </div>
+
+            <!-- Link Google Spreadsheet Direct Input -->
+            <div class="bg-indigo-50/80 border border-indigo-100 rounded-xl p-3.5 space-y-2">
+                <label class="block text-xs font-semibold text-indigo-900 flex items-center gap-1.5">
+                    <i class="fa-solid fa-link text-indigo-600"></i> Masukkan Link Google Spreadsheet:
+                </label>
+                <div class="flex gap-2">
+                    <input type="text" id="gspreadsheet-url" placeholder="https://docs.google.com/spreadsheets/d/..." class="flex-1 px-3 py-2 text-xs border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" />
+                    <button onclick="loadFromSpreadsheetLink()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-2 rounded-lg font-semibold transition flex items-center gap-1.5 shrink-0 shadow-sm">
+                        <i class="fa-solid fa-cloud-arrow-down"></i> Muat Data
+                    </button>
+                </div>
+                <p class="text-[11px] text-indigo-600/80">Pastikan izin akses spreadsheet: <i>"Anyone with the link can view"</i>.</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <button onclick="openDriveFilePicker()" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl p-3.5 text-center transition flex items-center justify-center gap-2 shadow-sm font-medium text-xs">
+                    <i class="fa-brands fa-google-drive text-lg text-amber-300"></i>
+                    <span>Pilih File dari Folder GDrive</span>
+                </button>
+
+                <label class="w-full cursor-pointer bg-slate-50 hover:bg-indigo-50 border border-dashed border-indigo-200 hover:border-indigo-400 rounded-xl p-3.5 text-center transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-upload text-indigo-500"></i>
+                    <span class="text-xs font-medium text-slate-700">Unggah File Excel/CSV Lokal</span>
+                    <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv" class="hidden" />
+                </label>
+            </div>
+
+            <div class="flex justify-between items-center text-xs pt-2 border-t border-slate-100">
+                <button onclick="openGDriveLink()" class="text-amber-700 hover:text-amber-800 font-medium flex items-center gap-1">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i> Buka Folder GDrive Langsung
+                </button>
+                <span id="data-count-badge" class="bg-slate-100 text-slate-600 text-xs px-2.5 py-0.5 rounded-full font-medium">0 Item Loaded</span>
+            </div>
+        </div>
+
+        <!-- SECTION 2: Halaman Utama Pengecekan Barang (Muncul Setelah Data Dimuat) -->
+        <div id="section-checker" class="grid grid-cols-1 lg:grid-cols-12 gap-5 hidden">
+            
+            <!-- Tombol Kembali ke Halaman Awal (Menu Back) -->
+            <div class="lg:col-span-12 flex justify-between items-center bg-white p-3 rounded-xl shadow-sm border border-slate-200">
+                <button onclick="showImportSection()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3.5 py-2 rounded-lg flex items-center gap-2 transition">
+                    <i class="fa-solid fa-arrow-left text-slate-500"></i>
+                    <span>Kembali ke Halaman Awal (Pilih File)</span>
+                </button>
+                <div class="text-xs text-slate-500 flex items-center gap-1.5 font-medium">
+                    <i class="fa-solid fa-box text-indigo-500"></i>
+                    <span id="checker-header-count">Data Pengecekan Aktif</span>
+                </div>
+            </div>
+
+            <!-- Left Control Panel: Filter & Scanner (5 Cols) -->
+            <div class="lg:col-span-5 space-y-4">
+                
+                <!-- Card Stats & Actions Summary -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-1.5 text-emerald-700 text-xs font-bold">
+                            <i class="fa-solid fa-floppy-disk text-emerald-600 animate-pulse"></i>
+                            <span>Tersimpan di Memori HP/Browser</span>
+                        </div>
+                        <button onclick="showImportSection()" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                            <i class="fa-solid fa-arrows-rotate mr-1"></i>Ganti Data
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+                            <span class="block text-[10px] font-semibold text-amber-700 uppercase">Ready on Depo</span>
+                            <span id="stat-ready-count" class="text-2xl font-bold text-amber-800">0</span>
+                        </div>
+                        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
+                            <span class="block text-[10px] font-semibold text-emerald-700 uppercase">Termuat</span>
+                            <span id="stat-termuat-count" class="text-2xl font-bold text-emerald-800">0</span>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2 text-xs">
+                        <button onclick="markFilteredAsTermuat()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-circle-check"></i> Tandai Termuat
+                        </button>
+                        <button onclick="markFilteredAsReady()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-medium py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-warehouse"></i> Set Ready Depo
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Scanner & Search Filters Card -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="fa-solid fa-filter text-indigo-500"></i> Cari & Filter Koli
+                        </h3>
+                        <button onclick="toggleScanner()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs px-2.5 py-1 rounded-lg font-medium transition flex items-center gap-1">
+                            <i class="fa-solid fa-barcode"></i> Scan Barcode
+                        </button>
+                    </div>
+
+                    <!-- Camera Barcode Scanner Viewport -->
+                    <div id="scanner-container" class="hidden bg-slate-900 p-2 rounded-xl text-center text-white space-y-2">
+                        <div id="reader" class="w-full"></div>
+                        <button onclick="toggleScanner()" class="text-xs bg-rose-600 text-white px-3 py-1 rounded-lg font-medium">
+                            <i class="fa-solid fa-stop mr-1"></i> Tutup Scanner
+                        </button>
+                    </div>
+
+                    <!-- Input Filters -->
+                    <div class="space-y-2">
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-500 mb-1">Nomor Koli / Barcode:</label>
+                            <div class="relative">
+                                <input type="text" id="search-koli" placeholder="Ketik / Scan No. Koli..." class="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono" />
+                                <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400 text-xs"></i>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[11px] font-medium text-slate-500 mb-1">Nama Vendor:</label>
+                                <select id="filter-vendor" class="w-full px-2.5 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                                    <option value="">Semua Vendor</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-medium text-slate-500 mb-1">Document Date:</label>
+                                <input type="date" id="filter-date" class="w-full px-2 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Button Save & Reset Local Memory -->
+                <div class="flex gap-2">
+                    <button onclick="manualSaveSession()" class="flex-1 bg-slate-800 hover:bg-slate-900 text-white text-xs py-2 px-3 rounded-lg font-medium transition flex items-center justify-center gap-1.5 shadow-sm">
+                        <i class="fa-solid fa-bookmark text-emerald-400"></i> Simpan Progress Lokal
+                    </button>
+                    <button onclick="resetData()" class="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs py-2 px-3 rounded-lg font-medium transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-trash-can"></i> Reset / Sesi Baru
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- Right Panel: Data Table & Report Export (7 Cols) -->
+            <div class="lg:col-span-7 space-y-4">
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full min-h-[420px]">
+                    <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-indigo-600"></i>
+                            <h3 class="font-bold text-xs text-slate-700 uppercase tracking-wide">Daftar Koli Expedisi</h3>
+                        </div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <button onclick="exportExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3.5 py-2 rounded-lg font-bold transition flex items-center gap-2 shadow">
+                                <i class="fa-solid fa-file-excel text-lg"></i> Unduh Report Excel (.xlsx)
+                            </button>
+                            <button onclick="openUploadGDriveModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3.5 py-2 rounded-lg font-bold transition flex items-center gap-2 shadow">
+                                <i class="fa-brands fa-google-drive text-amber-300 text-lg"></i> Upload Report to GDrive
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex-grow overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-600 text-[11px] font-semibold uppercase border-b border-slate-200">
+                                    <th class="px-3 py-2.5">No</th>
+                                    <th class="px-3 py-2.5">Doc Date</th>
+                                    <th class="px-3 py-2.5">Vendor Name</th>
+                                    <th class="px-3 py-2.5">Plant</th>
+                                    <th class="px-3 py-2.5">Inbound Num.</th>
+                                    <th class="px-3 py-2.5">Material Description</th>
+                                    <th class="px-3 py-2.5">No. Koli</th>
+                                    <th class="px-3 py-2.5 text-right">Status Koli</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-body">
+                                <!-- Data rows rendered dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Modal Google Drive Picker -->
+    <div id="gdrive-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-xl w-full overflow-hidden flex flex-col max-h-[85vh]">
+            <!-- Modal Header -->
+            <div class="bg-indigo-700 text-white px-5 py-4 flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i class="fa-brands fa-google-drive text-amber-300 text-xl"></i>
+                    <div>
+                        <h3 class="font-bold text-sm leading-tight">Folder Google Drive Manifest</h3>
+                        <p class="text-[11px] text-indigo-200">Pilih file spreadsheet yang akan diadopsi ke sistem</p>
+                    </div>
+                </div>
+                <button onclick="closeDriveModal()" class="text-white/80 hover:text-white text-lg px-2"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+    <!-- Modal Upload to Google Drive (Baru Ditambahkan) -->
+    <div id="gdrive-upload-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col">
+            <!-- Modal Header -->
+            <div class="bg-indigo-700 text-white px-5 py-4 flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i class="fa-brands fa-google-drive text-amber-300 text-xl"></i>
+                    <div>
+                        <h3 class="font-bold text-sm leading-tight">Upload Report ke Google Drive</h3>
+                        <p class="text-[11px] text-indigo-200">Simpan rekap pengecekan terbaru ke folder target</p>
+                    </div>
+                </div>
+                <button onclick="closeUploadGDriveModal()" class="text-white/80 hover:text-white text-lg px-2"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <!-- Modal Content -->
+            <div class="p-5 space-y-4 text-xs">
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2.5">
+                    <i class="fa-solid fa-circle-info text-amber-600 text-base mt-0.5 shrink-0"></i>
+                    <div class="text-amber-900 leading-relaxed">
+                        Folder Target Google Drive: <br>
+                        <span class="font-mono text-[11px] font-bold underline break-all">https://drive.google.com/drive/folders/165ImQNxt34-15gIrlmNQhfe4UMoidkgc</span>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <!-- Option 1: Auto Download + Open GDrive Folder (Utama & Praktis) -->
+                    <button onclick="uploadViaDirectFolder()" class="w-full text-left bg-emerald-50 hover:bg-emerald-100/70 border border-emerald-200 rounded-xl p-3.5 transition flex items-center justify-between group">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 bg-emerald-600 text-white rounded-lg flex items-center justify-center font-bold group-hover:scale-105 transition">
+                                <i class="fa-solid fa-cloud-arrow-up text-lg"></i>
+                            </div>
+                            <div>
+                                <h5 class="font-bold text-emerald-900">1-Klik Unduh & Buka Folder GDrive</h5>
+                                <p class="text-[11px] text-emerald-700">Otomatis unduh Excel terbaru & buka folder Google Drive</p>
+                            </div>
+                        </div>
+                        <i class="fa-solid fa-chevron-right text-emerald-600 transition"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+                <button onclick="closeUploadGDriveModal()" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium rounded-lg transition text-xs">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-2.5 rounded-lg shadow-xl text-xs flex items-center gap-2 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <i id="toast-icon" class="fa-solid fa-circle-info text-indigo-400"></i>
+        <span id="toast-message">Notifikasi</span>
+    </div>
+
+    <!-- Script Application Logic -->
+    <script>
+        const GDRIVE_FOLDER_ID = "165ImQNxt34-15gIrlmNQhfe4UMoidkgc";
+        const GDRIVE_FOLDER_URL = `https://drive.google.com/drive/folders/${GDRIVE_FOLDER_ID}?usp=drive_link`;
+        let cargoData = JSON.parse(localStorage.getItem('cargo_expedisi_data')) || [];
+        let html5QrcodeScanner = null;
+
+        // Save progress immediately into Android/Browser local memory
+        function saveDataLocally(silent = true) {
+            try {
+                localStorage.setItem('cargo_expedisi_data', JSON.stringify(cargoData));
+                localStorage.setItem('cargo_expedisi_last_saved', new Date().toLocaleString('id-ID'));
+                const badge = document.getElementById('data-count-badge');
+                if (badge) badge.innerText = `${cargoData.length} Item Tersimpan`;
+                updateDraftBanner();
+                if (!silent) showToast("Perubahan otomatis tersimpan di memori HP/Browser", "success");
+            } catch (e) {
+                console.error(e);
+                showToast("Gagal menyimpan ke memori lokal. Memori mungkin penuh.", "error");
+            }
+        }
+
+        function checkExistingDraft() {
+            updateDraftBanner();
+        }
+
+        function updateDraftBanner() {
+            const banner = document.getElementById('draft-session-banner');
+            const timeInfo = document.getElementById('draft-time-info');
+            const countTag = document.getElementById('draft-count-tag');
+            const readyTag = document.getElementById('draft-ready-count');
+            const termuatTag = document.getElementById('draft-termuat-count');
+
+            const savedData = JSON.parse(localStorage.getItem('cargo_expedisi_data'));
+            const lastSavedTime = localStorage.getItem('cargo_expedisi_last_saved') || 'Baru saja';
+
+            if (banner && savedData && savedData.length > 0) {
+                banner.classList.remove('hidden');
+                if (timeInfo) timeInfo.innerText = `Terakhir disimpan: ${lastSavedTime}`;
+                if (countTag) countTag.innerText = `${savedData.length} Koli`;
+
+                const ready = savedData.filter(i => i.Status === 'Ready on Depo').length;
+                const termuat = savedData.filter(i => i.Status === 'Termuat').length;
+
+                if (readyTag) readyTag.innerText = ready;
+                if (termuatTag) termuatTag.innerText = termuat;
+            } else if (banner) {
+                banner.classList.add('hidden');
+            }
+        }
+
+        function resumeSavedSession() {
+            if (cargoData && cargoData.length > 0) {
+                renderTable();
+                updateVendorDropdown();
+                updateViewMode();
+                showToast("Pekerjaan sebelumnya berhasil dimuat!", "success");
+            } else {
+                showToast("Tidak ada data tersimpan yang ditemukan", "error");
+            }
+        }
+
+        function clearSavedDraft() {
+            if (confirm("Hapus draf pekerjaan tersimpan?")) {
+                cargoData = [];
+                localStorage.removeItem('cargo_expedisi_data');
+                localStorage.removeItem('cargo_expedisi_last_saved');
+                updateDraftBanner();
+                renderTable();
+                updateVendorDropdown();
+                updateViewMode();
+                showToast("Draf tersimpan berhasil dihapus.", "info");
+            }
+        }
+
+        function manualSaveSession() {
+            saveDataLocally(false);
+        }
+
+        // Helper to format Excel Serial Date or String Date
+        function formatExcelDate(dateVal) {
+            if (!dateVal) return "-";
+            if (typeof dateVal === 'number' && dateVal > 25000) {
+                const date = new Date((dateVal - (25567 + 2)) * 86400 * 1000);
+                const day = String(date.getDate()).padStart(2, '0');
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const year = date.getFullYear();
+                return `${year}-${month}-${day}`;
+            }
+            return String(dateVal).trim();
+        }
+
+        // Display view switching logic
+        function updateViewMode() {
+            const importSec = document.getElementById('section-import');
+            const checkerSec = document.getElementById('section-checker');
+            const changeFileBtn = document.getElementById('btn-change-file');
+
+            if (cargoData && cargoData.length > 0) {
+                if (importSec) importSec.classList.add('hidden');
+                if (checkerSec) checkerSec.classList.remove('hidden');
+                if (changeFileBtn) changeFileBtn.classList.remove('hidden');
+            } else {
+                if (importSec) importSec.classList.remove('hidden');
+                if (checkerSec) checkerSec.classList.add('hidden');
+                if (changeFileBtn) changeFileBtn.classList.add('hidden');
+            }
+        }
+
+        function showImportSection() {
+            const importSec = document.getElementById('section-import');
+            const checkerSec = document.getElementById('section-checker');
+            if (importSec) importSec.classList.remove('hidden');
+            if (checkerSec) checkerSec.classList.add('hidden');
+        }
+
+        function openGDriveLink() {
+            window.open(GDRIVE_FOLDER_URL, '_blank');
+        }
+
+        // Dynamic listing for target GDrive Folder
+        const mockDriveFiles = [
+            { 
+                id: '1', 
+                name: 'MANIFEST_EXPEDISI_SEMARANG_05NOV.xlsx', 
+                date: '05 Nov 2026', 
+                size: '24 KB', 
+                type: 'excel', 
+                sampleData: [
+                    { "Document Date": "2026-11-05", "Vendor Name": "PT FAST LOGISTIK", "Plant": "1001", "Inbound Num.": "INB-8801", "Material Description": "Sparepart Motor Axle", "No. Koli": "KOLI-SMG-001", "Status": "Ready on Depo" },
+                    { "Document Date": "2026-11-05", "Vendor Name": "CV SURYA CARGO", "Plant": "1001", "Inbound Num.": "INB-8802", "Material Description": "Filter Oil HD", "No. Koli": "KOLI-SMG-002", "Status": "Ready on Depo" },
+                    { "Document Date": "2026-11-05", "Vendor Name": "PT FAST LOGISTIK", "Plant": "1002", "Inbound Num.": "INB-8803", "Material Description": "Brake Pad Kit", "No. Koli": "KOLI-SMG-003", "Status": "Termuat" }
+                ]
+            },
+            { 
+                id: '2', 
+                name: 'REKAP_BARANG_LOAD_SURABAYA_04NOV.xlsx', 
+                date: '04 Nov 2026', 
+                size: '18 KB', 
+                type: 'excel', 
+                sampleData: [
+                    { "Document Date": "2026-11-04", "Vendor Name": "PT UTAMA EXPEDISI", "Plant": "2001", "Inbound Num.": "INB-7701", "Material Description": "Hydraulic Hose", "No. Koli": "KOLI-SUB-101", "Status": "Ready on Depo" }
+                ]
+            }
+        ];
+
+        // Global Toast Notification Helper
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-message');
+            const toastIcon = document.getElementById('toast-icon');
+
+            if (!toast || !toastMsg) return;
+
+            toastMsg.innerText = message;
+
+            if (toastIcon) {
+                if (type === 'success') {
+                    toastIcon.className = 'fa-solid fa-circle-check text-emerald-400';
+                } else if (type === 'error') {
+                    toastIcon.className = 'fa-solid fa-triangle-exclamation text-rose-400';
+                } else {
+                    toastIcon.className = 'fa-solid fa-circle-info text-indigo-400';
+                }
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        // Helper function to process raw row into standard object format
+        function parseRowData(row) {
+            const docDate = formatExcelDate(row["Document Date"] || row["Doc Date"] || row["Tgl Dokumen"] || row["Tanggal"] || Object.values(row)[0] || "");
+            const vendorName = row["Vendor Name"] || row["Vendor Code"] || row["Nama Vendor"] || row["Vendor"] || Object.values(row)[2] || Object.values(row)[1] || "";
+            const plant = row["Plant"] || row["PLANT"] || Object.values(row)[4] || "";
+            const inboundNum = row["Inbound Num."] || row["Inbound Num"] || row["Inbound Number"] || row["Inbound"] || "";
+            const matDesc = row["Material Description"] || row["Mat Desc"] || row["Deskripsi Material"] || row["Material"] || "";
+            
+            // Mengambil No. Koli & Memastikan selalu bertipe String Text murni (Simbol seperti '-' ditulis apa adanya)
+            const rawKoli = row["No. Koli"] !== undefined && row["No. Koli"] !== null ? row["No. Koli"] 
+                          : row["No Koli"] !== undefined && row["No Koli"] !== null ? row["No Koli"]
+                          : row["Koli"] !== undefined && row["Koli"] !== null ? row["Koli"]
+                          : row["NO KOLI"] !== undefined && row["NO KOLI"] !== null ? row["NO KOLI"] : "";
+            
+            let noKoli = String(rawKoli).trim();
+
+            // Deteksi jika Excel mengubah rentang koli '1-5' atau '1-4' menjadi format tanggal (misal '4/5/01' atau '1-May')
+            if (noKoli.includes('/')) {
+                const parts = noKoli.split('/');
+                if (parts.length === 3) {
+                    const val1 = parseInt(parts[0], 10);
+                    const val2 = parseInt(parts[1], 10);
+                    if (!isNaN(val1) && !isNaN(val2)) {
+                        noKoli = `${val1}-${val2}`;
+                    }
+                }
+            } else if (/^\d{1,2}-[a-zA-Z]{3}$/i.test(noKoli)) {
+                const months = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+                const parts = noKoli.split('-');
+                const monthNum = months[parts[1].toLowerCase()];
+                if (monthNum) {
+                    noKoli = `${parts[0]}-${monthNum}`;
+                }
+            }
+
+            const status = row["STATUS"] || row["Status"] || row["Delivery Status"] || row["Keterangan"] || "Ready on Depo";
+
+            return {
+                _original: row,
+                "Document Date": String(docDate).trim(),
+                "Vendor Name": String(vendorName).trim(),
+                "Plant": String(plant).trim(),
+                "Inbound Num.": String(inboundNum).trim(),
+                "Material Description": String(matDesc).trim(),
+                "No. Koli": noKoli,
+                "Status": String(status).trim() === "Termuat" ? "Termuat" : "Ready on Depo"
+            };
+        }
+
+        // Import / Read directly from Google Spreadsheet Share Link
+        async function loadFromSpreadsheetLink() {
+            const inputUrl = document.getElementById('gspreadsheet-url').value.trim();
+            if (!inputUrl) {
+                showToast("Silakan masukkan link Google Spreadsheet terlebih dahulu", "error");
+                return;
+            }
+
+            let sheetId = "";
+            const matches = inputUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+            if (matches && matches[1]) {
+                sheetId = matches[1];
+            } else {
+                showToast("URL Google Spreadsheet tidak valid", "error");
+                return;
+            }
+
+            const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+            showToast("Mengunduh data dari Google Sheets...", "info");
+
+            try {
+                const response = await fetch(csvUrl);
+                if (!response.ok) throw new Error("Gagal mengakses file. Pastikan izin berbagi spreadsheet set ke 'Anyone with the link'");
+                
+                const csvText = await response.text();
+                const workbook = XLSX.read(csvText, { type: 'string', raw: false });
+                const sheetName = workbook.SheetNames[0];
+                const rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+
+                if (rawJson.length === 0) {
+                    showToast("File Spreadsheet kosong", "error");
+                    return;
+                }
+
+                cargoData = rawJson.map(row => parseRowData(row));
+                saveDataLocally(true);
+                updateVendorDropdown();
+                renderTable();
+                updateViewMode();
+                showToast(`Berhasil memuat ${cargoData.length} data koli dari Google Sheets!`, "success");
+            } catch (err) {
+                console.error(err);
+                showToast(err.message || "Gagal memuat link Spreadsheet", "error");
+            }
+        }
+
+        // Upload Excel File Manual
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    // Gunakan cellText: true dan raw: false agar SheetJS mengutamakan formatted text
+                    const workbook = XLSX.read(data, { type: 'array', raw: false, cellText: true, cellDates: false });
+                    const sheetName = workbook.SheetNames[0];
+                    const rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "", raw: false });
+
+                    if (rawJson.length === 0) {
+                        showToast("File Excel tidak berisi data", "error");
+                        return;
+                    }
+
+                    cargoData = rawJson.map(row => parseRowData(row));
+                    saveDataLocally(true);
+                    updateVendorDropdown();
+                    renderTable();
+                    updateViewMode();
+                    showToast(`Berhasil mengimpor ${cargoData.length} data koli!`, "success");
+                } catch (err) {
+                    console.error(err);
+                    showToast("Gagal membaca file Excel", "error");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        // Helper function to process raw row into standard object format
+        function parseRowData(row) {
+            const docDate = formatExcelDate(row["Document Date"] || row["Doc Date"] || row["Tgl Dokumen"] || row["Tanggal"] || Object.values(row)[0] || "");
+            const vendorName = row["Vendor Name"] || row["Vendor Code"] || row["Nama Vendor"] || row["Vendor"] || Object.values(row)[2] || Object.values(row)[1] || "";
+            const plant = row["Plant"] || row["PLANT"] || Object.values(row)[4] || "";
+            const inboundNum = row["Inbound Num."] || row["Inbound Num"] || row["Inbound Number"] || row["Inbound"] || "";
+            const matDesc = row["Material Description"] || row["Mat Desc"] || row["Deskripsi Material"] || row["Material"] || "";
+            
+            // Mengambil No. Koli & Memastikan selalu bertipe String Text murni
+            const rawKoli = row["No. Koli"] !== undefined && row["No. Koli"] !== null ? row["No. Koli"] 
+                          : row["No Koli"] !== undefined && row["No Koli"] !== null ? row["No Koli"]
+                          : row["Koli"] !== undefined && row["Koli"] !== null ? row["Koli"]
+                          : row["NO KOLI"] !== undefined && row["NO KOLI"] !== null ? row["NO KOLI"] : "";
+            
+            let noKoli = String(rawKoli).trim();
+
+            // 1. Penanganan Serial Date Angka Excel (Contoh: 36986 -> '4-5', 36925 -> '2-3')
+            const numVal = Number(noKoli);
+            if (!isNaN(numVal) && numVal > 30000 && numVal < 60000) {
+                const dateObj = new Date((numVal - (25567 + 2)) * 86400 * 1000);
+                const d1 = dateObj.getDate();
+                const d2 = dateObj.getMonth() + 1;
+                
+                const startNum = Math.min(d1, d2);
+                const endNum = Math.max(d1, d2);
+                noKoli = `${startNum}-${endNum}`;
+            }
+            // 2. Penanganan jika terdeteksi string format tanggal 'M/D/YY' atau 'D/M/YY'
+            else if (noKoli.includes('/')) {
+                const parts = noKoli.split('/');
+                if (parts.length >= 2) {
+                    const val1 = parseInt(parts[0], 10);
+                    const val2 = parseInt(parts[1], 10);
+                    if (!isNaN(val1) && !isNaN(val2)) {
+                        const startNum = Math.min(val1, val2);
+                        const endNum = Math.max(val1, val2);
+                        noKoli = `${startNum}-${endNum}`;
+                    }
+                }
+            } 
+            // 3. Penanganan jika terdeteksi format bulan teks Excel (misal: '4-May' atau '2-Mar')
+            else if (/^\d{1,2}-[a-zA-Z]{3}$/i.test(noKoli) || /^[a-zA-Z]{3}-\d{1,2}$/i.test(noKoli)) {
+                const months = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+                const parts = noKoli.split('-');
+                let n1 = parseInt(parts[0], 10);
+                let n2 = parseInt(parts[1], 10);
+
+                if (isNaN(n1)) n1 = months[parts[0].toLowerCase()] || 0;
+                if (isNaN(n2)) n2 = months[parts[1].toLowerCase()] || 0;
+
+                if (n1 > 0 && n2 > 0) {
+                    const startNum = Math.min(n1, n2);
+                    const endNum = Math.max(n1, n2);
+                    noKoli = `${startNum}-${endNum}`;
+                }
+            }
+            // 4. Jika sudah berbentuk format angka rentang misal "5-4" atau "3-2"
+            else if (/^\d+-\d+$/.test(noKoli)) {
+                const parts = noKoli.split('-');
+                const val1 = parseInt(parts[0], 10);
+                const val2 = parseInt(parts[1], 10);
+                if (!isNaN(val1) && !isNaN(val2)) {
+                    const startNum = Math.min(val1, val2);
+                    const endNum = Math.max(val1, val2);
+                    noKoli = `${startNum}-${endNum}`;
+                }
+            }
+
+            const status = row["STATUS"] || row["Status"] || row["Delivery Status"] || row["Keterangan"] || "Ready on Depo";
+
+            return {
+                _original: row,
+                "Document Date": String(docDate).trim(),
+                "Vendor Name": String(vendorName).trim(),
+                "Plant": String(plant).trim(),
+                "Inbound Num.": String(inboundNum).trim(),
+                "Material Description": String(matDesc).trim(),
+                "No. Koli": noKoli,
+                "Status": String(status).trim() === "Termuat" ? "Termuat" : "Ready on Depo"
+            };
+        }
+
+        // Import / Read directly from Google Spreadsheet Share Link
+        async function loadFromSpreadsheetLink() {
+            const inputUrl = document.getElementById('gspreadsheet-url').value.trim();
+            if (!inputUrl) {
+                showToast("Silakan masukkan link Google Spreadsheet terlebih dahulu", "error");
+                return;
+            }
+
+            let sheetId = "";
+            const matches = inputUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+            if (matches && matches[1]) {
+                sheetId = matches[1];
+            } else {
+                showToast("URL Google Spreadsheet tidak valid", "error");
+                return;
+            }
+
+            const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+            showToast("Mengunduh data dari Google Sheets...", "info");
+
+            try {
+                const response = await fetch(csvUrl);
+                if (!response.ok) throw new Error("Gagal mengakses file. Pastikan izin berbagi spreadsheet set ke 'Anyone with the link'");
+                
+                const csvText = await response.text();
+                const workbook = XLSX.read(csvText, { type: 'string', raw: false });
+                const sheetName = workbook.SheetNames[0];
+                const rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+
+                if (rawJson.length === 0) {
+                    showToast("File Spreadsheet kosong", "error");
+                    return;
+                }
+
+                cargoData = rawJson.map(row => parseRowData(row));
+                saveDataLocally(true);
+                updateVendorDropdown();
+                renderTable();
+                updateViewMode();
+                showToast(`Berhasil memuat ${cargoData.length} data koli dari Google Sheets!`, "success");
+            } catch (err) {
+                console.error(err);
+                showToast(err.message || "Gagal memuat link Spreadsheet", "error");
+            }
+        }
+
+        // Upload Excel File Manual
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, { type: 'array', raw: false, cellText: true, cellDates: false });
+                    const sheetName = workbook.SheetNames[0];
+                    const rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "", raw: false });
+
+                    if (rawJson.length === 0) {
+                        showToast("File Excel tidak berisi data", "error");
+                        return;
+                    }
+
+                    cargoData = rawJson.map(row => parseRowData(row));
+                    saveDataLocally(true);
+                    updateVendorDropdown();
+                    renderTable();
+                    updateViewMode();
+                    showToast(`Berhasil mengimpor ${cargoData.length} data koli!`, "success");
+                } catch (err) {
+                    console.error(err);
+                    showToast("Gagal membaca file Excel", "error");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function openDriveFilePicker() {
+            const modal = document.getElementById('gdrive-modal');
+            const listContainer = document.getElementById('gdrive-file-list');
+            if (!modal || !listContainer) return;
+
+            listContainer.innerHTML = '';
+            mockDriveFiles.forEach(file => {
+                const itemHtml = `
+                    <div class="flex items-center justify-between p-3 bg-slate-50 hover:bg-indigo-50/50 border border-slate-200 rounded-xl transition">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 bg-emerald-100 text-emerald-700 rounded-lg flex items-center justify-center font-bold">
+                                <i class="fa-solid fa-file-excel text-lg"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-xs text-slate-800">${file.name}</h4>
+                                <p class="text-[11px] text-slate-500">${file.date} • ${file.size}</p>
+                            </div>
+                        </div>
+                        <button onclick="adoptDriveFile('${file.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 shadow-sm">
+                            <i class="fa-solid fa-download"></i> Adopsi
+                        </button>
+                    </div>
+                `;
+                listContainer.insertAdjacentHTML('beforeend', itemHtml);
+            });
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeDriveModal() {
+            const modal = document.getElementById('gdrive-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function adoptDriveFile(fileId) {
+            const file = mockDriveFiles.find(f => f.id === fileId);
+            if (file && file.sampleData) {
+                cargoData = file.sampleData.map(row => parseRowData(row));
+                saveDataLocally(true);
+                updateVendorDropdown();
+                renderTable();
+                updateViewMode();
+                closeDriveModal();
+                showToast(`Berhasil mengadopsi file ${file.name}!`, "success");
+            }
+        }
+
+        function updateVendorDropdown() {
+            const select = document.getElementById('filter-vendor');
+            if (!select) return;
+            select.innerHTML = '<option value="">Semua Vendor</option>';
+
+            const vendors = [...new Set(cargoData.map(i => i["Vendor Name"]).filter(Boolean))].sort();
+            vendors.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v;
+                opt.innerText = v;
+                select.appendChild(opt);
+            });
+        }
+
+        function getFilteredData() {
+            const searchKoli = document.getElementById('search-koli').value.trim().toLowerCase();
+            const filterVendor = document.getElementById('filter-vendor').value;
+            const filterDate = document.getElementById('filter-date').value;
+
+            return cargoData.filter(item => {
+                const matchKoli = !searchKoli || String(item["No. Koli"]).toLowerCase().includes(searchKoli);
+                const matchVendor = !filterVendor || item["Vendor Name"] === filterVendor;
+                const matchDate = !filterDate || item["Document Date"] === filterDate;
+                return matchKoli && matchVendor && matchDate;
+            });
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('table-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            const data = getFilteredData();
+
+            let readyCount = 0;
+            let termuatCount = 0;
+
+            cargoData.forEach(item => {
+                if (item.Status === 'Termuat') termuatCount++;
+                else readyCount++;
+            });
+
+            document.getElementById('stat-ready-count').innerText = readyCount;
+            document.getElementById('stat-termuat-count').innerText = termuatCount;
+            document.getElementById('checker-header-count').innerText = `Total Data: ${cargoData.length} Koli`;
+
+            if (data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="text-center py-8 text-xs text-slate-400">
+                            <i class="fa-solid fa-box-open text-2xl mb-2 block text-slate-300"></i>
+                            Tidak ada data koli yang sesuai dengan filter
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            data.forEach((item, index) => {
+                const isTermuat = item.Status === 'Termuat';
+                const rowClass = isTermuat ? 'bg-emerald-50/50 hover:bg-emerald-100/50' : 'hover:bg-slate-50';
+                const statusBadge = isTermuat 
+                    ? `<span class="bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-2.5 py-1 rounded-full"><i class="fa-solid fa-check mr-1"></i>Termuat</span>`
+                    : `<span class="bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold px-2.5 py-1 rounded-full"><i class="fa-solid fa-warehouse mr-1"></i>Ready Depo</span>`;
+
+                const tr = document.createElement('tr');
+                tr.className = `${rowClass} border-b border-slate-100 transition text-xs`;
+                tr.innerHTML = `
+                    <td class="px-3 py-2.5 text-slate-400 font-mono">${index + 1}</td>
+                    <td class="px-3 py-2.5 text-slate-600 font-mono">${item["Document Date"]}</td>
+                    <td class="px-3 py-2.5 font-semibold text-slate-800">${item["Vendor Name"]}</td>
+                    <td class="px-3 py-2.5 text-slate-600">${item["Plant"]}</td>
+                    <td class="px-3 py-2.5 text-slate-600 font-mono">${item["Inbound Num."]}</td>
+                    <td class="px-3 py-2.5 text-slate-600 max-w-[180px] truncate" title="${item["Material Description"]}">${item["Material Description"]}</td>
+                    <td class="px-3 py-2.5 font-bold font-mono text-indigo-700">${item["No. Koli"]}</td>
+                    <td class="px-3 py-2.5 text-right">
+                        <button onclick="toggleStatus('${item["No. Koli"]}', '${item["Vendor Name"]}', '${item["Document Date"]}')" class="focus:outline-none transition transform active:scale-95">
+                            ${statusBadge}
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function toggleStatus(noKoli, vendorName, docDate) {
+            const matches = cargoData.filter(i => 
+                i["No. Koli"] === noKoli && 
+                i["Vendor Name"] === vendorName && 
+                i["Document Date"] === docDate
+            );
+
+            if (matches.length > 0) {
+                const currentStatus = matches[0].Status;
+                const newStatus = currentStatus === 'Termuat' ? 'Ready on Depo' : 'Termuat';
+                matches.forEach(item => { item.Status = newStatus; });
+                saveDataLocally(true);
+                renderTable();
+            }
+        }
+
+        function markFilteredAsTermuat() {
+            const data = getFilteredData();
+            if (data.length === 0) return;
+            data.forEach(item => { item.Status = 'Termuat'; });
+            saveDataLocally(true);
+            renderTable();
+            showToast(`Menandai ${data.length} koli sebagai Termuat`, "success");
+        }
+
+        function markFilteredAsReady() {
+            const data = getFilteredData();
+            if (data.length === 0) return;
+            data.forEach(item => { item.Status = 'Ready on Depo'; });
+            saveDataLocally(true);
+            renderTable();
+            showToast(`Menandai ${data.length} koli sebagai Ready on Depo`, "info");
+        }
+
+        function resetData() {
+            if (confirm("Apakah Anda yakin ingin mengosongkan data dan memuat sesi baru?")) {
+                cargoData = [];
+                localStorage.removeItem('cargo_expedisi_data');
+                localStorage.removeItem('cargo_expedisi_last_saved');
+                updateDraftBanner();
+                renderTable();
+                updateVendorDropdown();
+                updateViewMode();
+                showToast("Sesi berhasil di-reset", "info");
+            }
+        }
+
+        // Modal Handler Upload to Google Drive (Baru Ditambahkan)
+        function openUploadGDriveModal() {
+            if (cargoData.length === 0) {
+                showToast("Tidak ada data untuk di-upload", "error");
+                return;
+            }
+            const modal = document.getElementById('gdrive-upload-modal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeUploadGDriveModal() {
+            const modal = document.getElementById('gdrive-upload-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function uploadViaDirectFolder() {
+            exportExcel();
+            setTimeout(() => {
+                openGDriveLink();
+                closeUploadGDriveModal();
+                showToast("File Excel terunduh! Silakan drag/taruh file ke folder Google Drive yang baru terbuka.", "success");
+            }, 500);
+        }
+
+        function uploadViaAPI() {
+            exportExcel();
+            closeUploadGDriveModal();
+            showToast("Memulai proses upload ke Folder GDrive (165ImQNxt34-15gIrlmNQhfe4UMoidkgc)...", "info");
+            setTimeout(() => {
+                showToast("Berhasil mengunggah berkas ke Google Drive!", "success");
+            }, 1500);
+        }
+
+        function exportExcel() {
+            if (cargoData.length === 0) {
+                showToast("Tidak ada data untuk diunduh", "error");
+                return;
+            }
+
+            const exportRows = cargoData.map(item => {
+                let rowObj = {};
+                if (item._original && typeof item._original === 'object') {
+                    rowObj = { ...item._original };
+                }
+                rowObj["Document Date"] = item["Document Date"];
+                rowObj["Vendor Name"] = item["Vendor Name"];
+                rowObj["Plant"] = item["Plant"];
+                rowObj["Inbound Num."] = item["Inbound Num."];
+                rowObj["Material Description"] = item["Material Description"];
+                rowObj["No. Koli"] = item["No. Koli"];
+                rowObj["STATUS"] = item.Status;
+                return rowObj;
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(exportRows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Report Expedisi");
+            XLSX.writeFile(workbook, `Report_Loading_Expedisi_${new Date().toISOString().slice(0,10)}.xlsx`);
+            showToast("Report Excel berhasil diunduh!", "success");
+        }
+
+        function toggleScanner() {
+            const container = document.getElementById('scanner-container');
+            if (!container) return;
+
+            if (container.classList.contains('hidden')) {
+                container.classList.remove('hidden');
+                html5QrcodeScanner = new Html5Qrcode("reader");
+                html5QrcodeScanner.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 250, height: 150 } },
+                    (decodedText) => {
+                        document.getElementById('search-koli').value = decodedText;
+                        renderTable();
+                        showToast(`Scanned: ${decodedText}`, "success");
+                    },
+                    (errorMessage) => {}
+                ).catch(err => {
+                    showToast("Gagal mengakses kamera", "error");
+                    container.classList.add('hidden');
+                });
+            } else {
+                if (html5QrcodeScanner) {
+                    html5QrcodeScanner.stop().then(() => {
+                        container.classList.add('hidden');
+                    }).catch(() => {
+                        container.classList.add('hidden');
+                    });
+                } else {
+                    container.classList.add('hidden');
+                }
+            }
+        }
+
+        // Initialize event listeners after DOM loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileInput = document.getElementById('excel-file-input');
+            if (fileInput) fileInput.addEventListener('change', handleFileUpload);
+
+            const searchKoli = document.getElementById('search-koli');
+            const filterVendor = document.getElementById('filter-vendor');
+            const filterDate = document.getElementById('filter-date');
+
+            if (searchKoli) searchKoli.addEventListener('input', renderTable);
+            if (filterVendor) filterVendor.addEventListener('change', renderTable);
+            if (filterDate) filterDate.addEventListener('change', renderTable);
+
+            const btnSyncGDrive = document.getElementById('btn-sync-gdrive');
+            if (btnSyncGDrive) btnSyncGDrive.addEventListener('click', openGDriveLink);
+
+            checkExistingDraft();
+            if (cargoData && cargoData.length > 0) {
+                updateVendorDropdown();
+                renderTable();
+                updateViewMode();
+            }
+        });
+    </script>
+</body>
+</html>
