@@ -1018,13 +1018,66 @@
             }, 500);
         }
 
-        function uploadViaAPI() {
-            exportExcel();
-            closeUploadGDriveModal();
-            showToast("Memulai proses upload ke Folder GDrive (165ImQNxt34-15gIrlmNQhfe4UMoidkgc)...", "info");
-            setTimeout(() => {
-                showToast("Berhasil mengunggah berkas ke Google Drive!", "success");
-            }, 1500);
+                async function uploadViaAPI() {
+            if (cargoData.length === 0) {
+                showToast("Tidak ada data untuk di-upload", "error");
+                return;
+            }
+        
+            showToast("Mempersiapkan data Excel...", "info");
+        
+            // 1. Siapkan struktur baris Excel
+            const exportRows = cargoData.map(item => {
+                let rowObj = item._original && typeof item._original === 'object' ? { ...item._original } : {};
+                rowObj["Document Date"] = item["Document Date"];
+                rowObj["Vendor Name"] = item["Vendor Name"];
+                rowObj["Plant"] = item["Plant"];
+                rowObj["Inbound Num."] = item["Inbound Num."];
+                rowObj["Material Description"] = item["Material Description"];
+                rowObj["No. Koli"] = item["No. Koli"];
+                rowObj["STATUS"] = item.Status;
+                return rowObj;
+            });
+        
+            const worksheet = XLSX.utils.json_to_sheet(exportRows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Report Expedisi");
+        
+            // 2. Generate Excel sebagai string Base64 (Syarat untuk Apps Script)
+            const excelBase64 = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+            const fileName = `Report_Loading_Expedisi_${new Date().toISOString().slice(0,10)}.xlsx`;
+        
+            // 3. Masukkan Web App URL yang Anda copy dari Google Apps Script tadi
+            const webAppUrl = "PASTE_WEB_APP_URL_ANDA_DISINI";
+        
+            showToast("Mengunggah report ke folder GDrive...", "info");
+        
+            // 4. Kirim data ke Google Apps Script tanpa perlu proses login OAuth!
+            try {
+                const response = await fetch(webAppUrl, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        filename: fileName,
+                        content: excelBase64
+                    }),
+                    // Apps script kadang memerlukan header ini agar CORS tidak memblokir JSON
+                    headers: {
+                        "Content-Type": "text/plain;charset=utf-8", 
+                    }
+                });
+        
+                const result = await response.json();
+                
+                if (result.status === "success") {
+                    closeUploadGDriveModal();
+                    showToast("Upload Berhasil! Report langsung masuk ke folder tim.", "success");
+                } else {
+                    showToast("Upload gagal: " + result.message, "error");
+                }
+            } catch (error) {
+                console.error("Error upload:", error);
+                showToast("Gagal terhubung ke server GDrive.", "error");
+            }
         }
 
         function exportExcel() {
