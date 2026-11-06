@@ -1134,25 +1134,34 @@
         }
 
         async function uploadViaAPI() {
+            console.log("[DEBUG] Tombol Upload API diklik.");
+
             if (cargoData.length === 0) {
+                console.warn("[DEBUG] Data koli kosong. Membatalkan upload.");
                 showToast("Tidak ada data untuk diunggah", "error");
                 return;
             }
 
             showToast("Mempersiapkan data Excel Multi-Sheet...", "info");
+            console.log("[DEBUG] Memulai pembuatan multi-sheet workbook...");
 
             try {
-                // Menggunakan fungsi multi-sheet bawaan rekan Anda agar formatnya rapi
+                // Menggunakan fungsi multi-sheet bawaan agar formatnya rapi
                 const wb = generateMultiSheetWorkbook();
                 
                 // Generate Excel sebagai string Base64
                 const excelBase64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
                 const fileName = `CHECKLIST_LOADING_BARANG_${new Date().toISOString().slice(0, 10)}.xlsx`;
+                
+                console.log(`[DEBUG] File Excel (${fileName}) berhasil di-generate.`);
+                console.log(`[DEBUG] Ukuran payload Base64: ${excelBase64.length} karakter.`);
 
                 // MASUKKAN URL WEB APP DARI GOOGLE APPS SCRIPT DI SINI
                 const webAppUrl = "https://script.google.com/macros/s/AKfycbxRmziQ_Er-PsueIN5_DBeUI3K8dM2IYnMjGRW5inAqgNePqyGtiq2T72TPJ6ozzV1iZw/exec";
+                console.log("[DEBUG] Mengirim ke Web App URL:", webAppUrl);
 
                 showToast("Mengunggah report ke folder GDrive...", "info");
+                console.log("[DEBUG] Mengirim request POST ke server Google...");
 
                 // Kirim data ke Google Apps Script
                 const response = await fetch(webAppUrl, {
@@ -1166,17 +1175,27 @@
                     }
                 });
 
+                console.log("[DEBUG] Menunggu respons dari server...");
                 const result = await response.json();
+                console.log("[DEBUG] Respons server diterima:", result);
                 
                 if (result.status === "success") {
+                    console.log("[DEBUG] ✅ Upload sukses! File tersimpan di GDrive.");
                     if (typeof closeUploadGDriveModal === 'function') closeUploadGDriveModal();
+                    
+                    // Notifikasi sukses di layar utama
                     showToast("Upload Berhasil! Report langsung masuk ke folder tim.", "success");
                 } else {
+                    console.error("[DEBUG] ❌ Server menolak upload. Alasan:", result.message);
+                    
+                    // Notifikasi error dari server
                     showToast("Upload gagal: " + result.message, "error");
                 }
             } catch (error) {
-                console.error("Error upload:", error);
-                showToast("Gagal terhubung ke server GDrive.", "error");
+                console.error("[DEBUG] ❌ Terjadi error jaringan atau sistem:", error);
+                
+                // Notifikasi error jaringan/koneksi
+                showToast("Gagal terhubung ke server GDrive. Cek console browser.", "error");
             }
         }
 
